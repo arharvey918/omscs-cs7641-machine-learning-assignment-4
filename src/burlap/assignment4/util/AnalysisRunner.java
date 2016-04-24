@@ -1,6 +1,7 @@
 package burlap.assignment4.util;
 
 import burlap.assignment4.BasicGridWorld;
+import burlap.assignment4.thread.ValueIterationRunner;
 import burlap.behavior.policy.Policy;
 import burlap.behavior.singleagent.EpisodeAnalysis;
 import burlap.behavior.singleagent.auxiliary.StateReachability;
@@ -19,177 +20,282 @@ import burlap.oomdp.singleagent.environment.SimulatedEnvironment;
 import burlap.oomdp.statehashing.HashableStateFactory;
 import burlap.oomdp.statehashing.SimpleHashableStateFactory;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class AnalysisRunner {
 
-	final SimpleHashableStateFactory hashingFactory = new SimpleHashableStateFactory();
+    final SimpleHashableStateFactory hashingFactory = new SimpleHashableStateFactory();
 
-	private int MAX_ITERATIONS;
-	private int NUM_INTERVALS;
+    private int MAX_ITERATIONS;
+    private int NUM_INTERVALS;
+    private int REPEATS;
 
-	public AnalysisRunner(int MAX_ITERATIONS, int NUM_INTERVALS){
-		this.MAX_ITERATIONS = MAX_ITERATIONS;
-		this.NUM_INTERVALS = NUM_INTERVALS;
-		
-		int increment = MAX_ITERATIONS/NUM_INTERVALS;
-		for(int numIterations = increment;numIterations<=MAX_ITERATIONS;numIterations+=increment ){
-			AnalysisAggregator.addNumberOfIterations(numIterations);
+    public AnalysisRunner(int MAX_ITERATIONS, int NUM_INTERVALS, int REPEATS) {
+        this.MAX_ITERATIONS = MAX_ITERATIONS;
+        this.NUM_INTERVALS = NUM_INTERVALS;
+        this.REPEATS = REPEATS;
 
-		}
+        int increment = MAX_ITERATIONS / NUM_INTERVALS;
+        for (int numIterations = increment; numIterations <= MAX_ITERATIONS; numIterations += increment) {
+            AnalysisAggregator.addNumberOfIterations(numIterations);
 
-	}
-	public void runValueIteration(BasicGridWorld gen, Domain domain,
-			State initialState, RewardFunction rf, TerminalFunction tf, boolean showPolicyMap) {
-		System.out.println("//Value Iteration Analysis//");
-		ValueIteration vi = null;
-		Policy p = null;
-		EpisodeAnalysis ea = null;
-		int increment = MAX_ITERATIONS/NUM_INTERVALS;
-		for(int numIterations = increment;numIterations<=MAX_ITERATIONS;numIterations+=increment ){
-			long startTime = System.nanoTime();
-			vi = new ValueIteration(
-					domain,
-					rf,
-					tf,
-					0.99,
-					hashingFactory,
-					-1, numIterations); //Added a very high delta number in order to guarantee that value iteration occurs the max number of iterations
-										   //for comparison with the other algorithms.
-	
-			// run planning from our initial state
-			p = vi.planFromState(initialState);
-			AnalysisAggregator.addMillisecondsToFinishValueIteration((int) (System.nanoTime()-startTime)/1000000);
+        }
 
-			// evaluate the policy with one roll out visualize the trajectory
-			ea = p.evaluateBehavior(initialState, rf, tf);
-			AnalysisAggregator.addValueIterationReward(calcRewardInEpisode(ea));
-			AnalysisAggregator.addStepsToFinishValueIteration(ea.numTimeSteps());
-		}
-		
+    }
+
+//    public void runValueIterationMultiThread(BasicGridWorld gen, Domain domain,
+//                                             State initialState, RewardFunction rf, TerminalFunction tf, boolean showPolicyMap) {
+//        System.out.println("//Value Iteration Analysis//");
+//
+//        int increment = MAX_ITERATIONS / NUM_INTERVALS;
+//
+//        List<ValueIterationRunner> threads = new ArrayList<ValueIterationRunner>();
+//        ExecutorService executor = Executors.newFixedThreadPool(5);
+//
+//        for (int numIterations = increment; numIterations <= MAX_ITERATIONS; numIterations += increment) {
+//            ValueIterationRunner vir = new ValueIterationRunner(domain, initialState, rf, tf, hashingFactory, numIterations);
+//            threads.add(vir);
+//            executor.execute(vir);
+//        }
+//        executor.shutdown();
+//        while (!executor.isTerminated()) {
+//        }
+//        System.out.println("Finished value iteration threads");
+//
+//        for (int i = 0; i < threads.size(); i++) {
+//            AnalysisAggregator.addMillisecondsToFinishValueIteration(threads.get(i).getAnalysisResult().getElapsedTime());
+//            AnalysisAggregator.addValueIterationReward(calcRewardInEpisode(threads.get(i).getAnalysisResult().getEpisodeAnalysis()));
+//            AnalysisAggregator.addStepsToFinishValueIteration(threads.get(i).getAnalysisResult().getEpisodeAnalysis().numTimeSteps());
+//        }
+//
+////		Visualizer v = gen.getVisualizer();
+////		new EpisodeSequenceVisualizer(v, domain, Arrays.asList(ea));
+//        ValueIteration vi = threads.get(threads.size() - 1).getAnalysisResult().getValueIteration();
+//        Policy p = threads.get(threads.size() - 1).getAnalysisResult().getPolicy();
+//
+//        AnalysisAggregator.printValueIterationResults();
+//        MapPrinter.printPolicyMap(vi.getAllStates(), p, gen.getMap());
+//        System.out.println("\n\n");
+//        if (showPolicyMap) {
+//            simpleValueFunctionVis((ValueFunction) vi, p, initialState, domain, hashingFactory);
+//        }
+//    }
+
+    public void runValueIteration(BasicGridWorld gen, Domain domain,
+                                  State initialState, RewardFunction rf, TerminalFunction tf, boolean showPolicyMap) {
+        double[] sumMillis = new double[NUM_INTERVALS];
+        double[] sumReward = new double[NUM_INTERVALS];
+        double[] sumSteps = new double[NUM_INTERVALS];
+
+        System.out.println("//Value Iteration Analysis//");
+        ValueIteration vi = null;
+        Policy p = null;
+        EpisodeAnalysis ea = null;
+        int increment = MAX_ITERATIONS / NUM_INTERVALS;
+        for (int i = 0; i < REPEATS; i++) {
+            int counter = 0;
+            for (int numIterations = increment; numIterations <= MAX_ITERATIONS; numIterations += increment) {
+                long startTime = System.nanoTime();
+                vi = new ValueIteration(
+                        domain,
+                        rf,
+                        tf,
+                        0.99,
+                        hashingFactory,
+                        -1, numIterations); //Added a very high delta number in order to guarantee that value iteration occurs the max number of iterations
+                //for comparison with the other algorithms.
+
+                // run planning from our initial state
+                p = vi.planFromState(initialState);
+
+                // evaluate the policy with one roll out visualize the trajectory
+                ea = p.evaluateBehavior(initialState, rf, tf);
+
+                // add to sums
+                sumMillis[counter] += (int) (System.nanoTime() - startTime) / 1000000;
+                sumReward[counter] += calcRewardInEpisode(ea);
+                sumSteps[counter++] += ea.numTimeSteps();
+            }
+        }
+
+        // Process averages
+        for (int i = 0; i < NUM_INTERVALS; i++) {
+            sumMillis[i] = sumMillis[i] / REPEATS;
+            sumReward[i] = sumReward[i] / REPEATS;
+            sumSteps[i] = sumSteps[i] / REPEATS;
+
+            AnalysisAggregator.addMillisecondsToFinishValueIteration(sumMillis[i]);
+            AnalysisAggregator.addValueIterationReward(sumReward[i]);
+            AnalysisAggregator.addStepsToFinishValueIteration(sumSteps[i]);
+        }
+
 //		Visualizer v = gen.getVisualizer();
 //		new EpisodeSequenceVisualizer(v, domain, Arrays.asList(ea));
-		AnalysisAggregator.printValueIterationResults();
-		MapPrinter.printPolicyMap(vi.getAllStates(), p, gen.getMap());
-		System.out.println("\n\n");
-		if(showPolicyMap){
-			simpleValueFunctionVis((ValueFunction)vi, p, initialState, domain, hashingFactory);
-		}
-	}
+        AnalysisAggregator.printValueIterationResults();
+        MapPrinter.printPolicyMap(vi.getAllStates(), p, gen.getMap());
+        System.out.println("\n\n");
+        if (showPolicyMap) {
+            simpleValueFunctionVis((ValueFunction) vi, p, initialState, domain, hashingFactory);
+        }
+    }
 
-	public void runPolicyIteration(BasicGridWorld gen, Domain domain,
-			State initialState, RewardFunction rf, TerminalFunction tf, boolean showPolicyMap) {
-		System.out.println("//Policy Iteration Analysis//");
-		PolicyIteration pi = null;
-		Policy p = null;
-		EpisodeAnalysis ea = null;
-		int increment = MAX_ITERATIONS/NUM_INTERVALS;
-		for(int numIterations = increment;numIterations<=MAX_ITERATIONS;numIterations+=increment ){
-			long startTime = System.nanoTime();
-			pi = new PolicyIteration(
-					domain,
-					rf,
-					tf,
-					0.99,
-					hashingFactory,
-					-1, 1, numIterations);
-	
-			// run planning from our initial state
-			p = pi.planFromState(initialState);
-			AnalysisAggregator.addMillisecondsToFinishPolicyIteration((int) (System.nanoTime()-startTime)/1000000);
+    public void runPolicyIteration(BasicGridWorld gen, Domain domain,
+                                   State initialState, RewardFunction rf, TerminalFunction tf, boolean showPolicyMap) {
+        double[] sumMillis = new double[NUM_INTERVALS];
+        double[] sumReward = new double[NUM_INTERVALS];
+        double[] sumSteps = new double[NUM_INTERVALS];
 
-			// evaluate the policy with one roll out visualize the trajectory
-			ea = p.evaluateBehavior(initialState, rf, tf);
-			AnalysisAggregator.addPolicyIterationReward(calcRewardInEpisode(ea));
-			AnalysisAggregator.addStepsToFinishPolicyIteration(ea.numTimeSteps());
-		}
+        System.out.println("//Policy Iteration Analysis//");
+        PolicyIteration pi = null;
+        Policy p = null;
+        EpisodeAnalysis ea = null;
+        int increment = MAX_ITERATIONS / NUM_INTERVALS;
+        for (int i = 0; i < REPEATS; i++) {
+            int counter = 0;
+            for (int numIterations = increment; numIterations <= MAX_ITERATIONS; numIterations += increment) {
+                long startTime = System.nanoTime();
+                pi = new PolicyIteration(
+                        domain,
+                        rf,
+                        tf,
+                        0.99,
+                        hashingFactory,
+                        -1, 1, numIterations);
+
+                // run planning from our initial state
+                p = pi.planFromState(initialState);
+
+                // evaluate the policy with one roll out visualize the trajectory
+                ea = p.evaluateBehavior(initialState, rf, tf);
+
+                // add to sums
+                sumMillis[counter] += (int) (System.nanoTime() - startTime) / 1000000;
+                sumReward[counter] += calcRewardInEpisode(ea);
+                sumSteps[counter++] += ea.numTimeSteps();
+            }
+        }
+
+        // Process averages
+        for (int i = 0; i < NUM_INTERVALS; i++) {
+            sumMillis[i] = sumMillis[i] / REPEATS;
+            sumReward[i] = sumReward[i] / REPEATS;
+            sumSteps[i] = sumSteps[i] / REPEATS;
+
+            AnalysisAggregator.addMillisecondsToFinishPolicyIteration(sumMillis[i]);
+            AnalysisAggregator.addPolicyIterationReward(sumReward[i]);
+            AnalysisAggregator.addStepsToFinishPolicyIteration(sumSteps[i]);
+        }
 
 //		Visualizer v = gen.getVisualizer();
 //		new EpisodeSequenceVisualizer(v, domain, Arrays.asList(ea));
-		AnalysisAggregator.printPolicyIterationResults();
+        AnalysisAggregator.printPolicyIterationResults();
 
-		MapPrinter.printPolicyMap(getAllStates(domain,rf,tf,initialState), p, gen.getMap());
-		System.out.println("\n\n");
+        MapPrinter.printPolicyMap(getAllStates(domain, rf, tf, initialState), p, gen.getMap());
+        System.out.println("\n\n");
 
-		//visualize the value function and policy.
-		if(showPolicyMap){
-			simpleValueFunctionVis(pi, p, initialState, domain, hashingFactory);
-		}
-	}
+        //visualize the value function and policy.
+        if (showPolicyMap) {
+            simpleValueFunctionVis(pi, p, initialState, domain, hashingFactory);
+        }
+    }
 
-	public void simpleValueFunctionVis(ValueFunction valueFunction, Policy p, 
-			State initialState, Domain domain, HashableStateFactory hashingFactory){
+    public void simpleValueFunctionVis(ValueFunction valueFunction, Policy p,
+                                       State initialState, Domain domain, HashableStateFactory hashingFactory) {
 
-		List<State> allStates = StateReachability.getReachableStates(initialState,
-				(SADomain)domain, hashingFactory);
-		ValueFunctionVisualizerGUI gui = GridWorldDomain.getGridWorldValueFunctionVisualization(
-				allStates, valueFunction, p);
-		gui.initGUI();
+        List<State> allStates = StateReachability.getReachableStates(initialState,
+                (SADomain) domain, hashingFactory);
+        ValueFunctionVisualizerGUI gui = GridWorldDomain.getGridWorldValueFunctionVisualization(
+                allStates, valueFunction, p);
+        gui.initGUI();
 
-	}
-	
-	public void runQLearning(BasicGridWorld gen, Domain domain,
-			State initialState, RewardFunction rf, TerminalFunction tf,
-			SimulatedEnvironment env, boolean showPolicyMap) {
-		System.out.println("//Q Learning Analysis//");
+    }
 
-		QLearning agent = null;
-		Policy p = null;
-		EpisodeAnalysis ea = null;
-		int increment = MAX_ITERATIONS/NUM_INTERVALS;
-		for(int numIterations = increment;numIterations<=MAX_ITERATIONS;numIterations+=increment ){
-			long startTime = System.nanoTime();
+    public void runQLearning(BasicGridWorld gen, Domain domain,
+                             State initialState, RewardFunction rf, TerminalFunction tf,
+                             SimulatedEnvironment env, boolean showPolicyMap) {
+        double[] sumMillis = new double[NUM_INTERVALS];
+        double[] sumReward = new double[NUM_INTERVALS];
+        double[] sumSteps = new double[NUM_INTERVALS];
 
-			agent = new QLearning(
-				domain,
-				0.99,
-				hashingFactory,
-				0.99, 0.99);
-			
-			for (int i = 0; i < numIterations; i++) {
-				ea = agent.runLearningEpisode(env);
-				env.resetEnvironment();
-			}
-			agent.initializeForPlanning(rf, tf, 1);
-			p = agent.planFromState(initialState);
-			AnalysisAggregator.addQLearningReward(calcRewardInEpisode(ea));
-			AnalysisAggregator.addMillisecondsToFinishQLearning((int) (System.nanoTime()-startTime)/1000000);
-			AnalysisAggregator.addStepsToFinishQLearning(ea.numTimeSteps());
+        System.out.println("//Q Learning Analysis//");
 
-		}
-		AnalysisAggregator.printQLearningResults();
-		MapPrinter.printPolicyMap(getAllStates(domain,rf,tf,initialState), p, gen.getMap());
-		System.out.println("\n\n");
+        QLearning agent = null;
+        Policy p = null;
+        EpisodeAnalysis ea = null;
+        int increment = MAX_ITERATIONS / NUM_INTERVALS;
+        for (int i = 0; i < REPEATS; i++) {
+            int counter = 0;
+            for (int numIterations = increment; numIterations <= MAX_ITERATIONS; numIterations += increment) {
+                long startTime = System.nanoTime();
 
-		//visualize the value function and policy.
-		if(showPolicyMap){
-			simpleValueFunctionVis((ValueFunction)agent, p, initialState, domain, hashingFactory);
-		}
+                agent = new QLearning(
+                        domain,
+                        0.99,
+                        hashingFactory,
+                        0.99, 0.1);
 
-	}
-	
-	private static List<State> getAllStates(Domain domain,
-			 RewardFunction rf, TerminalFunction tf,State initialState){
-		ValueIteration vi = new ValueIteration(
-				domain,
-				rf,
-				tf,
-				0.99,
-				new SimpleHashableStateFactory(),
-				.5, 100);
-		vi.planFromState(initialState);
+                for (int k = 0; k < numIterations; k++) {
+                    ea = agent.runLearningEpisode(env);
+                    env.resetEnvironment();
+                }
+                agent.initializeForPlanning(rf, tf, 1);
+                p = agent.planFromState(initialState);
 
-		return vi.getAllStates();
-	}
-	
-	public double calcRewardInEpisode(EpisodeAnalysis ea) {
-		double myRewards = 0;
+                // add to sums
+                sumMillis[counter] += (int) (System.nanoTime() - startTime) / 1000000;
+                sumReward[counter] += calcRewardInEpisode(ea);
+                sumSteps[counter++] += ea.numTimeSteps();
+            }
+        }
 
-		//sum all rewards
-		for (int i = 0; i<ea.rewardSequence.size(); i++) {
-			myRewards += ea.rewardSequence.get(i);
-		}
-		return myRewards;
-	}
-	
+        // Process averages
+        for (int i = 0; i < NUM_INTERVALS; i++) {
+            sumMillis[i] = sumMillis[i] / REPEATS;
+            sumReward[i] = sumReward[i] / REPEATS;
+            sumSteps[i] = sumSteps[i] / REPEATS;
+
+            AnalysisAggregator.addMillisecondsToFinishQLearning(sumMillis[i]);
+            AnalysisAggregator.addQLearningReward(sumReward[i]);
+            AnalysisAggregator.addStepsToFinishQLearning(sumSteps[i]);
+        }
+
+        AnalysisAggregator.printQLearningResults();
+        MapPrinter.printPolicyMap(getAllStates(domain, rf, tf, initialState), p, gen.getMap());
+        System.out.println("\n\n");
+
+        //visualize the value function and policy.
+        if (showPolicyMap) {
+            simpleValueFunctionVis((ValueFunction) agent, p, initialState, domain, hashingFactory);
+        }
+
+    }
+
+    private static List<State> getAllStates(Domain domain,
+                                            RewardFunction rf, TerminalFunction tf, State initialState) {
+        ValueIteration vi = new ValueIteration(
+                domain,
+                rf,
+                tf,
+                0.99,
+                new SimpleHashableStateFactory(),
+                .5, 100);
+        vi.planFromState(initialState);
+
+        return vi.getAllStates();
+    }
+
+    public double calcRewardInEpisode(EpisodeAnalysis ea) {
+        double myRewards = 0;
+
+        //sum all rewards
+        for (int i = 0; i < ea.rewardSequence.size(); i++) {
+            myRewards += ea.rewardSequence.get(i);
+        }
+        return myRewards;
+    }
+
 }

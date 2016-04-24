@@ -22,10 +22,10 @@ public class Movement extends SimpleAction implements FullActionModel {
 		super(actionName, domain);
 		for(int i = 0; i < 4; i++){
 			if(i == direction){
-				directionProbs[i] = 0.8;
+				directionProbs[i] = 0.7;
 			}
 			else{
-				directionProbs[i] = 0.2/3.;
+				directionProbs[i] = 0.3/3.;
 			}
 		}
 		this.map = map;
