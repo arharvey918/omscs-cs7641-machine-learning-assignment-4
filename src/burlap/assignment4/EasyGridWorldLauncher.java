@@ -14,8 +14,8 @@ public class EasyGridWorldLauncher {
     private static boolean visualizeInitialGridWorld = true; //Loads a GUI with the agent, walls, and goal
 
     //runValueIteration, runPolicyIteration, and runQLearning indicate which algorithms will run in the experiment
-    private static boolean runValueIteration = false;
-    private static boolean runPolicyIteration = false;
+    private static boolean runValueIteration = true;
+    private static boolean runPolicyIteration = true;
     private static boolean runQLearning = true;
 
     //showValueIterationPolicyMap, showPolicyIterationPolicyMap, and showQLearningPolicyMap will open a GUI
